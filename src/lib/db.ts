@@ -96,6 +96,26 @@ async function setup(): Promise<void> {
       await client.query('INSERT INTO maxout_settings(key,value) VALUES($1,$2::jsonb) ON CONFLICT (key) DO NOTHING',
         [key,JSON.stringify(value)]);
     }
+    // One-time, non-destructive import of verified rows in the updated MAXOUT workbook.
+    // SKUs are retained as strings to avoid losing precision on long IDs.
+    const workbookProducts = [
+      ['1523914729834283008', 'MAXOUT BLACKOUT Tee', 'Tee', 10.55, 5, 30],
+      ['1523915041248776192', 'MAXOUT BLACKOUT Sweatpants', 'Pants', 17.48, 15, 37],
+      ['1524294296038236160', 'MAXOUT BLACKOUT Tank Top', 'Tank', 10.97, 5, 25],
+      ['1524295720755224576', 'MAXOUT BLACKOUT Hoodie', 'Hoodie', 21.4, 14.92, 49],
+      ['1531131481584521216', 'MAXOUT BLACKOUT Crewneck', 'Hoodie', 15.07, 8.49, 41]
+    ] as const;
+    for (const [sku, name, category, manufacturing, shipping, sellingPrice] of workbookProducts) {
+      // Never overwrite changes entered in the dashboard.
+      await client.query(
+        `INSERT INTO maxout_records(kind,data)
+         SELECT 'products', $1::jsonb
+         WHERE NOT EXISTS (
+           SELECT 1 FROM maxout_records WHERE kind='products' AND data->>'sku'=$2
+         )`,
+        [JSON.stringify({drop:'BLACKOUT',sku,name,category,status:'Ready',manufacturing,shipping,branding:1.5,packaging:0,other:0,selling_price:sellingPrice,discount:0,customer_shipping:0,source:'MAXOUT Business Command Center - Updated.xlsx'}), sku]
+      );
+    }
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
