@@ -20,10 +20,48 @@ async function save(){setLoading(true);try{let data={...form};delete data.id;del
 async function remove(item:any){if(!confirm('Delete this item?'))return;try{await json('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:page,action:'delete',id:item.id,data:{}})});await refresh(user!)}catch(e:any){setNotice(e.message)}}
 async function setting(key:string,value:number){try{await json('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'settings',data:{key,value}})});await refresh(user!);setNotice('Updated '+key)}catch(e:any){setNotice(e.message)}}
 async function upload(file:File){setLoading(true);try{const d=new FormData();d.set('file',file);const r=await json('/api/upload',{method:'POST',body:d});setForm((f:any)=>({...f,file_url:r.url}));setNotice('File uploaded')}catch(e:any){setNotice(e.message)}finally{setLoading(false)}}
-async function importWorkbook(file:File){const {default:readXlsxFile}=await import('read-excel-file');const mapping:Record<string,[string,string[]]>={'Products':['products',['drop','sku','name','category','status','launch_date','manufacturing','shipping','branding','packaging','other','total_cost','selling_price','discount','fees','profit']],'Sales Tracker':['sales',['date','order_id','drop','sku','product','quantity','unit_price','discount','customer_shipping','revenue','manufacturing','shipping_cost','branding','packaging','other','fees','product_cost','profit','status']],'Expenses':['expenses',['date','category','description','vendor','payment_method','amount','notes','status']],'Marketing':['marketing',['campaign','platform','drop','start_date','end_date','budget','spend','impressions','clicks','orders','revenue']],'Inventory':['inventory',['sku','product','drop','starting','received','sold','damaged','reserved','available','reorder_level','reorder_flag','unit_cost','inventory_value']],'Monthly Budget':['budget',['month','category','budget','actual']]};
-let inserted=0;
-if(!confirm('Import nonempty workbook rows? Importing the same file twice creates duplicate records.'))return;
-setLoading(true);try{for(const [sheet,[kind,cols]] of Object.entries(mapping)){const rows=await readXlsxFile(file,{sheet});for(const row of rows.slice(4)){if(!row[0]&&!row[1]&&!row[2])continue;const data=Object.fromEntries(cols.map((key,i)=>[key,row[i]??'']));if(kind==='products'){if(data.branding===''||typeof data.branding==='string')data.branding=1.5}await json('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,data})});inserted++}}await refresh(user!);setNotice('Imported '+inserted+' records')}catch(e:any){setNotice('Imported '+inserted+' rows, then stopped: '+e.message)}finally{setLoading(false)}}
+async function importWorkbook(file:File){
+  const {default:readXlsxFile}=await import('read-excel-file');
+  const mapping:Record<string,[string,string[]]>={
+    'Products':['products',['drop','sku','name','category','status','launch_date','manufacturing','shipping','branding','packaging','other','total_cost','selling_price','discount','fees','profit','margin','markup','projected_quantity','projected_revenue','projected_profit','break_even_price','supplier','notes','customer_shipping']],
+    'Sales Tracker':['sales',['date','order_id','drop','sku','product','quantity','unit_price','discount','customer_shipping','revenue','manufacturing','shipping_cost','branding','packaging','other','fees','product_cost','profit','status','sales_channel','notes']],
+    'Expenses':['expenses',['date','category','description','vendor','payment_method','amount','notes','status']],
+    'Marketing':['marketing',['campaign','platform','drop','start_date','end_date','budget','spend','impressions','clicks','orders','revenue']],
+    'Inventory':['inventory',['drop','sku','product','variant','starting','received','sold','damaged','available','reorder_level','inventory_status','unit_cost','inventory_value','supplier','notes']],
+    'Monthly Budget':['budget',['month','category','budget','actual']]
+  };
+  if(!confirm('Import filled spreadsheet rows? Existing product SKUs will be updated; other records will be added.'))return;
+  setLoading(true);
+  let inserted=0;
+  try {
+    const existingProducts=await json('/api/data?kind=products');
+    const existingBySku=new Map((Array.isArray(existingProducts)?existingProducts:[]).filter((p:any)=>p.sku).map((p:any)=>[String(p.sku),p.id]));
+    for(const [sheet,[kind,cols]] of Object.entries(mapping)){
+      let rows:any[][];
+      try {rows=await readXlsxFile(file,{sheet}) as any[][]}catch(e){if(sheet==='Products')throw e;continue}
+      // Workbook has header text in its fourth row (index 3).
+      for(const row of rows.slice(4)){
+        const data:any=Object.fromEntries(cols.map((key,i)=>[key,row[i]??'']));
+        if(kind==='products'&&(!data.name||!data.sku))continue;
+        if(kind!=='products'&&!row.slice(0,Math.min(5,row.length)).some(v=>v!==null&&v!==undefined&&v!==''))continue;
+        if(kind==='products'){
+          data.sku=String(data.sku);
+          if(data.branding===''||data.branding==null)data.branding=1.5;
+          for(const key of ['manufacturing','shipping','branding','packaging','other','selling_price','discount','customer_shipping','projected_quantity']){
+            if(data[key]==='')data[key]=0;
+          }
+        }
+        const existingId=kind==='products'?existingBySku.get(String(data.sku)):undefined;
+        await json('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind,action:existingId?'update':'create',id:existingId,data})});
+        if(kind==='products'&&!existingId){const products=await json('/api/data?kind=products');const found=(Array.isArray(products)?products:[]).find((p:any)=>String(p.sku)===data.sku);if(found)existingBySku.set(data.sku,found.id)}
+        inserted++;
+      }
+    }
+    await refresh(user!);
+    setNotice('Imported or updated '+inserted+' rows from workbook');
+  }catch(e:any){setNotice('Imported '+inserted+' rows; then stopped: '+e.message)}
+  finally{setLoading(false)}
+}
 const canEdit=user?.role==='owner'||(user?.role==='designer'&&['drops','designs'].includes(page))||(user?.role==='marketing'&&page==='marketing')||(user?.role==='accounting'&&['sales','expenses','inventory','budget'].includes(page));
 const values=records[page]||[];
 const summaryProducts=records.products||[];
