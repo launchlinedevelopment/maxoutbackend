@@ -124,6 +124,12 @@ async function setup(): Promise<void> {
       const data={name,sku,drop,status:'Ready',manufacturing,selling_price,shipping_weight_lb:weight,customer_shipping,shipping:0,branding:0,packaging:0,other:0,source:'catalog_products.csv',notes:manufacturing?'':'Manufacturing cost not provided in catalog'};
       await client.query("INSERT INTO maxout_records(kind,data) SELECT 'products',$1::jsonb WHERE NOT EXISTS(SELECT 1 FROM maxout_records WHERE kind='products' AND (data->>'sku'=$2 OR lower(data->>'name')=lower($3)))",[JSON.stringify(data),sku,name]);
     }
+    // Initial payments.csv snapshot. Order ID is the deduplication key.
+    const importedPayments=[["10003","2026-07-23","MAXOUT Core Compression Shirt / MAXOUT Summer Tee / MAXOUT Summer Shorts",3,75.2,20,18],["10002","2026-05-12","MAXOUT Core Racerback Tank",1,29.5,6,0],["10001","2026-05-07","MAXOUT Apex Hoodie / MAXOUT Core Shorts / MAXOUT Core Tee",3,105.44,20,36]] as [string,string,string,number,number,number,number][];
+    for(const [order_id,date,product,quantity,revenue,customer_shipping,discount] of importedPayments){
+      const data={order_id,date,product,quantity,revenue,customer_shipping,discount,status:'Successful',source:'payments.csv'};
+      await client.query("INSERT INTO maxout_records(kind,data) SELECT 'sales',$1::jsonb WHERE NOT EXISTS(SELECT 1 FROM maxout_records WHERE kind='sales' AND data->>'order_id'=$2)",[JSON.stringify(data),order_id]);
+    }
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
