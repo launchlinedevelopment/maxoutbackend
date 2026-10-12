@@ -91,31 +91,30 @@ async function setup(): Promise<void> {
       }
     }
     for (const [key,value] of [
-      ['bank_balance',0], ['branding_default',1.5], ['processing_rate',0.027], ['processing_fixed',0.05]
+      ['bank_balance',0], ['branding_default',0], ['processing_rate',0.027], ['processing_fixed',0.05]
     ] as const) {
       await client.query('INSERT INTO maxout_settings(key,value) VALUES($1,$2::jsonb) ON CONFLICT (key) DO NOTHING',
         [key,JSON.stringify(value)]);
     }
-    // One-time, non-destructive import of verified rows in the updated MAXOUT workbook.
-    // SKUs are retained as strings to avoid losing precision on long IDs.
-    const workbookProducts = [
-      ['1523914729834283008', 'MAXOUT BLACKOUT Tee', 'Tee', 10.55, 5, 30],
-      ['1523915041248776192', 'MAXOUT BLACKOUT Sweatpants', 'Pants', 17.48, 15, 37],
-      ['1524294296038236160', 'MAXOUT BLACKOUT Tank Top', 'Tank', 10.97, 5, 25],
-      ['1524295720755224576', 'MAXOUT BLACKOUT Hoodie', 'Hoodie', 21.4, 14.92, 49],
-      ['1531131481584521216', 'MAXOUT BLACKOUT Crewneck', 'Hoodie', 15.07, 8.49, 41]
-    ] as const;
-    for (const [sku, name, category, manufacturing, shipping, sellingPrice] of workbookProducts) {
-      // Never overwrite changes entered in the dashboard.
-      await client.query(
-        `INSERT INTO maxout_records(kind,data)
-         SELECT 'products', $1::jsonb
-         WHERE NOT EXISTS (
-           SELECT 1 FROM maxout_records WHERE kind='products' AND data->>'sku'=$2
-         )`,
-        [JSON.stringify({drop:'BLACKOUT',sku,name,category,status:'Ready',manufacturing,shipping,branding:1.5,packaging:0,other:0,selling_price:sellingPrice,discount:0,customer_shipping:0,source:'MAXOUT Business Command Center - Updated.xlsx'}), sku]
-      );
+    // Workbook snapshot (MAXOUT Command Center (1).xlsx), non-destructive and repeatable.
+    // Only update entries previously populated by the old automatic seed; respect manual edits.
+    const workbookProducts = [["1523914729834283008","MAXOUT BLACKOUT Tee","Tee","Ready",10.55,5,30,6,"Tapstitch",""],["1523915041248776192","MAXOUT BLACKOUT Sweatpants","Pants","Ready",17.48,8.37,37,8,"Tapstitch",""],["1524294296038236160","MAXOUT BLACKOUT Tank Top","Tank","Ready",10.97,4.25,25,6,"Tapstitch",""],["1524295720755224576","MAXOUT BLACKOUT Hoodie","Hoodie","Ready",21.4,10.3,49,11,"Tapstitch",""],["1531131481584521216","MAXOUT BLACKOUT Crewneck","Hoodie","Ready",15.07,6.6,41,8,"Tapstitch",""],["1532206434987769856","MAXOUT BLACKOUT Compression","Tee","Ready",12.39,5.91,32,6,"Tapstitch",""],["22705134123767062313","MAXOUT BLACKOUT Backpack","Bag","Ready",45.9,8.29,48.99,8,"Printful","Maybe find better price?"],["1558255326191636480","MAXOUT BLACKOUT Yoga Shorts","Shorts","Design",15.48,5,32,6,"Tapstitch",""]] as const;
+    for (const [sku,name,category,status,manufacturing,shipping,selling_price,customer_shipping,supplier,notes] of workbookProducts) {
+      const data={drop:'BLACKOUT',sku,name,category,status,manufacturing,shipping,branding:0,packaging:0,other:0,selling_price,discount:0,customer_shipping,supplier,notes,source:'MAXOUT Command Center (1).xlsx'};
+      await client.query(`UPDATE maxout_records SET data=$1::jsonb,updated_at=now()
+        WHERE kind='products' AND data->>'sku'=$2
+        AND data->>'source'='MAXOUT Business Command Center - Updated.xlsx'`,
+        [JSON.stringify(data),sku]);
+      await client.query(`INSERT INTO maxout_records(kind,data)
+        SELECT 'products',$1::jsonb WHERE NOT EXISTS (
+          SELECT 1 FROM maxout_records WHERE kind='products' AND data->>'sku'=$2
+        )`,[JSON.stringify(data),sku]);
     }
+    await client.query(`INSERT INTO maxout_records(kind,data)
+      SELECT 'expenses',$1::jsonb WHERE NOT EXISTS (
+        SELECT 1 FROM maxout_records WHERE kind='expenses'
+        AND data->>'source_key'='workbook-expense-2026-10-05-modeling'
+      )`,[JSON.stringify({date:'2026-10-05',vendor:'Modeling | Micahel Bodnar',category:'Marketing',description:'Modeling for BLACKOUT Compression shirt',drop:'BLACKOUT',amount:10,payment_method:'Cash',status:'Paid',recurring:'No',notes:"Noah's Money, Not Company's",company_funded:false,source_key:'workbook-expense-2026-10-05-modeling'})]);
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
