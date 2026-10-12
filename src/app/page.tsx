@@ -46,7 +46,7 @@ async function importWorkbook(file:File){
         if(kind!=='products'&&!row.slice(0,Math.min(5,row.length)).some(v=>v!==null&&v!==undefined&&v!==''))continue;
         if(kind==='products'){
           data.sku=String(data.sku);
-          if(data.branding===''||data.branding==null)data.branding=1.5;
+          if(data.branding===''||data.branding==null)data.branding=0;
           for(const key of ['manufacturing','shipping','branding','packaging','other','selling_price','discount','customer_shipping','projected_quantity']){
             if(data[key]==='')data[key]=0;
           }
