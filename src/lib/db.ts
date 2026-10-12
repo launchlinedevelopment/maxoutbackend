@@ -3,7 +3,7 @@ const g=globalThis as unknown as {maxoutPool?:Pool,maxoutInit?:Promise<void>};
 export function db(){if(!process.env.DATABASE_URL)throw Error('DATABASE_URL is not configured');return g.maxoutPool??(g.maxoutPool=new Pool({connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_URL?.includes('localhost')?false:{rejectUnauthorized:false}}))}
 export async function init(){if(!g.maxoutInit)g.maxoutInit=setup().catch(e=>{g.maxoutInit=undefined;throw e});return g.maxoutInit}
 async function setup(){const p=db();await p.query(`CREATE TABLE IF NOT EXISTS maxout_users(id bigserial primary key,username text unique not null, password_hash text not null,role text not null check(role in ('owner','marketing','accounting','designer')),active boolean not null default true,created_at timestamptz default now());
-CREATE TABLE IF NOT EXISTS maxout_records(id bigserial primary key,kind text not null,data jsonb not null default '{}',created_by bigint references users(id),created_at timestamptz default now(),updated_at timestamptz default now());
+CREATE TABLE IF NOT EXISTS maxout_records(id bigserial primary key,kind text not null,data jsonb not null default '{}',created_by bigint references maxout_users(id),created_at timestamptz default now(),updated_at timestamptz default now());
 CREATE INDEX IF NOT EXISTS maxout_records_kind_idx ON maxout_records(kind);
 CREATE TABLE IF NOT EXISTS maxout_settings(key text primary key,value jsonb not null,updated_at timestamptz default now());`);
 const owner=await p.query("SELECT id FROM maxout_users WHERE role='owner' LIMIT 1");
