@@ -1,0 +1,1 @@
+import {NextResponse} from 'next/server';import {session} from '../../../lib/auth';export async function GET(){try{return NextResponse.json({user:await session()})}catch{return NextResponse.json({error:'Database not ready'},{status:503})}}
