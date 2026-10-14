@@ -91,3 +91,15 @@ main{min-width:0;max-width:1540px;width:100%;padding:39px clamp(22px,4vw,62px) 6
 .inline-value:hover,.inline-value:focus-visible{background:#283228;border-color:#536443;color:#e9f5dc}.inline-value span{color:#a3d773;font-size:11px;opacity:0}.inline-value:hover span,.inline-value:focus-visible span{opacity:1}.quote-trigger{color:#d9fb70;font-weight:700;white-space:nowrap}
 .inline-editor{display:flex;flex-wrap:wrap;align-items:center;gap:5px;min-width:155px;max-width:245px}.inline-editor input,.cost-inline input[type=number]{min-width:0;width:100%;border:1px solid #667d4b;background:#111812;color:#fff;padding:8px 9px;border-radius:7px;outline:none;font-size:12px}.inline-editor input{flex:1;min-width:110px}.inline-editor-actions{display:flex;gap:4px}.inline-editor-actions button{background:#303831;color:#eef3ec;border-radius:6px;padding:5px 9px}.inline-editor-actions .inline-confirm{background:#d9fb70;color:#161c12}.inline-editor .error{font-size:10px;width:100%;color:#ffb0b0;background:none;padding:0;margin:0}
 .cost-inline{min-width:216px;max-width:240px;padding:10px;border:1px solid #546744;border-radius:9px;background:#1a251b;box-shadow:0 10px 22px #0005}.cost-inline label{display:grid;gap:5px;color:#b9c3b8;font-size:10px;font-weight:650;margin-bottom:9px}.cost-inline .cost-check{display:flex;align-items:center;gap:7px;font-size:10px}.cost-inline .cost-check input{accent-color:#d9fb70}.cost-inline .primary,.cost-inline .secondary{padding:6px 10px;font-size:10px}
+
+/* Products table: preserve readable widths; scroll horizontally instead of crushing cells. */
+.tablewrap{width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+.tablewrap table{width:max-content;min-width:100%;table-layout:auto}
+.tablewrap th,.tablewrap td{box-sizing:border-box;white-space:nowrap;overflow-wrap:normal;word-break:normal;vertical-align:middle}
+.tablewrap th{white-space:nowrap}
+.tablewrap .inline-value{min-width:0;max-width:none;white-space:nowrap;overflow-wrap:normal;word-break:normal;margin:0;padding:7px 8px}
+.tablewrap td:nth-child(2),.tablewrap td:nth-child(3){min-width:185px}
+.tablewrap td:nth-child(2) .inline-value,.tablewrap td:nth-child(3) .inline-value{max-width:320px;white-space:normal;overflow-wrap:break-word;word-break:normal}
+.tablewrap .inline-editor{min-width:185px}
+.tablewrap .cost-inline{white-space:normal}
+@media(max-width:700px){.tablewrap td:nth-child(2),.tablewrap td:nth-child(3){min-width:145px}}
