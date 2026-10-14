@@ -96,6 +96,9 @@ async function setup(): Promise<void> {
       await client.query('INSERT INTO maxout_settings(key,value) VALUES($1,$2::jsonb) ON CONFLICT (key) DO NOTHING',
         [key,JSON.stringify(value)]);
     }
+    // Run historical imports only once. Otherwise deleting imported records recreates them on the next cold start.
+    const seedMarker = await client.query("SELECT value FROM maxout_settings WHERE key='initial_imports_completed_v2'");
+    if (!seedMarker.rowCount) {
     // Workbook snapshot (MAXOUT Command Center (1).xlsx), non-destructive and repeatable.
     // Only update entries previously populated by the old automatic seed; respect manual edits.
     const workbookProducts = [["1523914729834283008","MAXOUT BLACKOUT Tee","Tee","Ready",10.55,5,30,6,"Tapstitch",""],["1523915041248776192","MAXOUT BLACKOUT Sweatpants","Pants","Ready",17.48,8.37,37,8,"Tapstitch",""],["1524294296038236160","MAXOUT BLACKOUT Tank Top","Tank","Ready",10.97,4.25,25,6,"Tapstitch",""],["1524295720755224576","MAXOUT BLACKOUT Hoodie","Hoodie","Ready",21.4,10.3,49,11,"Tapstitch",""],["1531131481584521216","MAXOUT BLACKOUT Crewneck","Hoodie","Ready",15.07,6.6,41,8,"Tapstitch",""],["1532206434987769856","MAXOUT BLACKOUT Compression","Tee","Ready",12.39,5.91,32,6,"Tapstitch",""],["22705134123767062313","MAXOUT BLACKOUT Backpack","Bag","Ready",45.9,8.29,48.99,8,"Printful","Maybe find better price?"],["1558255326191636480","MAXOUT BLACKOUT Yoga Shorts","Shorts","Design",15.48,5,32,6,"Tapstitch",""]] as const;
@@ -137,6 +140,8 @@ async function setup(): Promise<void> {
     for(const [order_id,date,product,quantity,revenue,customer_shipping,discount] of importedPayments){
       const data={order_id,date,product,quantity,revenue,customer_shipping,discount,status:'Successful',source:'payments.csv'};
       await client.query("INSERT INTO maxout_records(kind,data) SELECT 'sales',$1::jsonb WHERE NOT EXISTS(SELECT 1 FROM maxout_records WHERE kind='sales' AND data->>'order_id'=$2)",[JSON.stringify(data),order_id]);
+    }
+      await client.query("INSERT INTO maxout_settings(key,value) VALUES('initial_imports_completed_v2','true'::jsonb) ON CONFLICT(key) DO NOTHING");
     }
     await client.query('COMMIT');
   } catch (error) {
