@@ -28,7 +28,35 @@ async function setting(key:string,value:number){try{await json('/api/data',{meth
 async function upload(file:File){setLoading(true);try{const d=new FormData();d.set('file',file);const r=await json('/api/upload',{method:'POST',body:d});setForm((f:any)=>({...f,file_url:r.url}));setNotice('File uploaded')}catch(e:any){setNotice(e.message)}finally{setLoading(false)}}
 // CSV parser supports quoted commas, multiline values, and escaped quote characters.
 function parseCsv(text:string):string[][]{const rows:string[][]=[];let row:string[]=[],cell='',quoted=false;for(let i=0;i<text.length;i++){const ch=text[i];if(ch==='"'){if(quoted&&text[i+1]==='"'){cell+='"';i++}else quoted=!quoted}else if(ch===','&&!quoted){row.push(cell);cell=''}else if((ch.charCodeAt(0)===10||ch.charCodeAt(0)===13)&&!quoted){if(ch.charCodeAt(0)===13&&text.charCodeAt(i+1)===10)i++;row.push(cell);if(row.some(x=>x.trim()))rows.push(row);row=[];cell=''}else cell+=ch}row.push(cell);if(row.some(x=>x.trim()))rows.push(row);return rows}
-async function importOrders(file:File){setLoading(true);setNotice('');try{const rows=parseCsv(await file.text());const headerIndex=rows.findIndex(row=>row.some(v=>v.trim().toLowerCase()==='order id'));if(headerIndex<0)throw Error('Missing Order ID column');const headers=rows[headerIndex].map(h=>h.trim().toLowerCase());const index=(...names:string[])=>names.map(n=>headers.indexOf(n)).find(n=>n>=0)??-1;const take=(r:string[],...names:string[])=>{const n=index(...names);return n>=0?r[n]||'':''};const orders=rows.slice(headerIndex+1).filter(r=>take(r,'order id')).map(r=>{const amount=Number(take(r,'amount','revenue').replace(/[$,]/g,''))||0;const shipping=Number(take(r,'shipping','customer shipping').replace(/[$,]/g,''))||0;const rawDate=take(r,'payment date gmt -04:00','date','transaction date gmt -04:00');const date=new Date(rawDate);return {order_id:take(r,'order id').trim(),date:Number.isNaN(date.getTime())?rawDate:date.toISOString().slice(0,10),product:take(r,'name','product'),quantity:Number(take(r,'quantity'))||1,revenue:amount,customer_shipping:shipping,discount:Number(take(r,'discount').replace(/[$,]/g,''))||0,fees:Number(take(r,'processing fee'))||0,status:take(r,'transaction status','status')||'Successful',affiliate_code:take(r,'affiliate code','discount code','coupon code','coupon'),source:'payments.csv'}});if(!orders.length)throw Error('No valid orders found');const result=await json('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'sales',action:'import_orders',data:orders})});await refresh(user!);setNotice('Imported '+result.imported+' new orders. Skipped '+result.skipped+' already present or duplicate orders.')}catch(e:any){setNotice('Import failed: '+e.message)}finally{setLoading(false)}}
+async function importOrders(file:File){setLoading(true);setNotice('');try{
+ const rows=parseCsv(await file.text());
+ const headerIndex=rows.findIndex(row=>row.some(v=>['order number','order id'].includes(v.trim().toLowerCase())));
+ if(headerIndex<0)throw Error('Missing Order number or Order ID column');
+ const headers=rows[headerIndex].map(h=>h.trim().toLowerCase());
+ const index=(...names:string[])=>names.map(n=>headers.indexOf(n)).find(n=>n>=0)??-1;
+ const take=(r:string[],...names:string[])=>{const i=index(...names);return i>=0?r[i]||'':''};
+ const cash=(v:string)=>Number(String(v||'').replace(/[$,]/g,''))||0;
+ const wix=headers.includes('order number')&&headers.includes('item')&&headers.includes('total');
+ let orders:any[]=[];
+ if(wix){
+   const grouped=new Map<string,string[][]>();
+   for(const r of rows.slice(headerIndex+1)){const number=take(r,'order number').trim();if(!number)continue;const bucket=grouped.get(number)||[];bucket.push(r);grouped.set(number,bucket)}
+   orders=[...grouped.entries()].map(([order_id,lines])=>{
+     const first=lines[0];const rawDate=take(first,'date created');const date=new Date(rawDate);
+     const total=cash(take(first,'total'));const shipping=cash(take(first,'shipping rate'));
+     const tax=cash(take(first,'total tax'));const additional=cash(take(first,'additional fees'));
+     const products=lines.filter(r=>take(r,'item').trim());
+     const items=products.map(r=>({product:take(r,'item'),sku:take(r,'sku'),variant:take(r,'variant'),quantity:Math.max(1,cash(take(r,'qty'))),price:cash(take(r,'price'))}));
+     const codes=[...new Set(lines.flatMap(r=>[take(r,'item coupon code'),take(r,'global coupon code')].map(x=>x.trim().toUpperCase()).filter(Boolean)))];
+     return {order_id,date:Number.isNaN(date.getTime())?rawDate:date.toISOString().slice(0,10),product:items.map(x=>x.product).join(' / '),items,quantity:items.reduce((sum,x)=>sum+x.quantity,0)||cash(take(first,'total order quantity'))||1,revenue:Math.max(0,total-tax-additional),customer_shipping:shipping,discount:products.reduce((sum,r)=>sum+cash(take(r,'item discount amount')),0)+cash(take(first,'global discount amount')),fees:additional,tax,status:take(first,'payment status')||'Unknown',affiliate_code:codes[0]||'',coupon_codes:codes,source:'wix-orders.csv'};
+   });
+ }else{
+   orders=rows.slice(headerIndex+1).filter(r=>take(r,'order id','order number')).map(r=>{const amount=cash(take(r,'amount','revenue'));const shipping=cash(take(r,'shipping','customer shipping'));const rawDate=take(r,'payment date gmt -04:00','date','transaction date gmt -04:00');const date=new Date(rawDate);return {order_id:take(r,'order id','order number').trim(),date:Number.isNaN(date.getTime())?rawDate:date.toISOString().slice(0,10),product:take(r,'name','product'),quantity:Number(take(r,'quantity'))||1,revenue:amount,customer_shipping:shipping,discount:cash(take(r,'discount')),fees:cash(take(r,'processing fee')),status:take(r,'transaction status','status')||'Successful',affiliate_code:take(r,'affiliate code','discount code','coupon code','coupon'),source:'payments.csv'}})
+ }
+ if(!orders.length)throw Error('No valid orders found');
+ const result=await json('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'sales',action:'import_orders',data:orders})});
+ await refresh(user!);setNotice('Imported '+result.imported+' orders. Skipped '+result.skipped+' duplicates or already imported orders.');
+ }catch(e:any){setNotice('Import failed: '+e.message)}finally{setLoading(false)}}
 async function importWorkbook(file:File){
   const {default:readXlsxFile}=await import('read-excel-file');
   const mapping:Record<string,[string,string[]]>={
