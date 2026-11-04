@@ -3,12 +3,11 @@ import {timingSafeEqual} from 'node:crypto';
 import {db,init} from '../../../../lib/db';
 export const dynamic='force-dynamic';
 function authorized(req:Request){
- const expected=process.env.JARVIS_INTEGRATION_TOKEN;
+ const available=[process.env.JARVIS_INTEGRATION_TOKEN,process.env.JARVIS_LIFE_INTEGRATION_TOKEN].filter((v):v is string=>Boolean(v&&v.length>=32));
  const header=req.headers.get('authorization')||'';
- if(!expected||expected.length<32||!header.startsWith('Bearer '))return false;
- const actual=header.slice(7);
- const a=Buffer.from(actual),b=Buffer.from(expected);
- return a.length===b.length&&timingSafeEqual(a,b);
+ if(!header.startsWith('Bearer ')||!available.length)return false;
+ const actual=Buffer.from(header.slice(7));
+ return available.some(token=>{const expected=Buffer.from(token);return actual.length===expected.length&&timingSafeEqual(actual,expected)});
 }
 export async function GET(req:Request){
  if(!authorized(req))return NextResponse.json({error:'Unauthorized'},{status:401,headers:{'Cache-Control':'no-store'}});
