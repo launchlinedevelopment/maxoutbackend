@@ -10,7 +10,7 @@ function authorized(req:Request){
  return available.some(token=>{const expected=Buffer.from(token);return actual.length===expected.length&&timingSafeEqual(actual,expected)});
 }
 export async function GET(req:Request){
- if(!authorized(req))return NextResponse.json({error:'Unauthorized'},{status:401,headers:{'Cache-Control':'no-store'}});
+ if(!authorized(req))return NextResponse.json({error:'MAXOUT service credentials rejected',code:'invalid_service_credentials'},{status:401,headers:{'Cache-Control':'no-store'}});
  const kind=new URL(req.url).searchParams.get('kind')||'overview';
  if(!['overview','products','inventory','sales','tasks'].includes(kind))return NextResponse.json({error:'Unsupported report'},{status:400});
  try{
