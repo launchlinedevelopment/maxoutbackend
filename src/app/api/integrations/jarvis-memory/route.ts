@@ -43,12 +43,13 @@ export async function GET(req:NextRequest){
    finally{client.release()}
   }
   const query=(req.nextUrl.searchParams.get("q")||"").trim().slice(0,180);
+  const searchTerms=(query.toLowerCase().match(/[a-z0-9]{3,}/g)||[]).slice(0,8).join(" | ");
   const amount=Math.max(1,Math.min(Number(req.nextUrl.searchParams.get("limit")||30)||30,100));
-  const results=mode==="search"&&query.length>1?
+  const results=mode==="search"&&searchTerms.length>1?
    await db().query<MemoryRow>(`SELECT id::text,role,content,origin,created_at::text
      FROM jarvis_private.conversation_messages
-     WHERE to_tsvector('english',content) @@ plainto_tsquery('english',$1)
-     ORDER BY created_at DESC LIMIT $2`,[query,amount]):
+     WHERE to_tsvector('english',content) @@ to_tsquery('english',$1)
+     ORDER BY created_at DESC LIMIT $2`,[searchTerms,amount]):
    await db().query<MemoryRow>(`SELECT id::text,role,content,origin,created_at::text
      FROM jarvis_private.conversation_messages
      ORDER BY created_at DESC LIMIT $1`,[amount]);
