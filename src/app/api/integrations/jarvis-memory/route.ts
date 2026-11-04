@@ -31,6 +31,17 @@ export async function GET(req:NextRequest){
  try{
   await initialize();
   const mode=req.nextUrl.searchParams.get("mode")||"recent";
+  if(mode==="health"){
+   const client=await db().connect();
+   try{
+    await client.query("BEGIN");
+    const row=await client.query<{id:string}>("INSERT INTO jarvis_private.conversation_messages(role,content,origin) VALUES('user','JARVIS_MEMORY_SELF_TEST','OS') RETURNING id::text");
+    const found=await client.query("SELECT id FROM jarvis_private.conversation_messages WHERE id=$1",[row.rows[0].id]);
+    await client.query("ROLLBACK");
+    return NextResponse.json({status:"ready",readWrite:found.rowCount===1,rolledBack:true},{headers:noStore});
+   }catch(e){await client.query("ROLLBACK");throw e}
+   finally{client.release()}
+  }
   const query=(req.nextUrl.searchParams.get("q")||"").trim().slice(0,180);
   const amount=Math.max(1,Math.min(Number(req.nextUrl.searchParams.get("limit")||30)||30,100));
   const results=mode==="search"&&query.length>1?
