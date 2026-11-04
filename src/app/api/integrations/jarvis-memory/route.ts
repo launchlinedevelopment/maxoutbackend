@@ -1,6 +1,6 @@
 import {NextRequest,NextResponse} from "next/server";
 import {timingSafeEqual} from "node:crypto";
-import {db} from "@/lib/db";
+import {db} from "../../../../lib/db";
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
 const noStore={"Cache-Control":"private, no-store"};
